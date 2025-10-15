@@ -31,6 +31,10 @@ export class GameEngine {
   private animationId: number | null = null
   private sessionData: SessionData
   private isRunning = false
+  private currentGaze: { x: number; y: number } | null = null
+  private isTracking = false
+  private trackingScore = 0
+  private totalFrames = 0
 
   constructor(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, level: string) {
     this.canvas = canvas
@@ -237,20 +241,56 @@ export class GameEngine {
 
     // Draw objects
     this.objects.forEach(obj => {
+      // Highlight object if being tracked
+      if (this.isTracking) {
+        this.ctx.beginPath()
+        this.ctx.arc(obj.x, obj.y, obj.radius + 10, 0, Math.PI * 2)
+        this.ctx.strokeStyle = 'rgba(102, 234, 126, 0.6)'
+        this.ctx.lineWidth = 4
+        this.ctx.stroke()
+      }
+
       this.ctx.beginPath()
       this.ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2)
       this.ctx.fillStyle = obj.color
       this.ctx.fill()
       
       // Add glow effect
-      this.ctx.shadowBlur = 20
-      this.ctx.shadowColor = obj.color
+      this.ctx.shadowBlur = this.isTracking ? 30 : 20
+      this.ctx.shadowColor = this.isTracking ? '#66ea7e' : obj.color
       this.ctx.fill()
       this.ctx.shadowBlur = 0
+
+      // Draw tracking zone (subtle)
+      if (this.level === 'level1') {
+        this.ctx.beginPath()
+        this.ctx.arc(obj.x, obj.y, obj.radius * 3, 0, Math.PI * 2)
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'
+        this.ctx.lineWidth = 1
+        this.ctx.stroke()
+      }
     })
+
+    // Draw gaze indicator (small dot where user is looking)
+    if (this.currentGaze) {
+      this.ctx.beginPath()
+      this.ctx.arc(this.currentGaze.x, this.currentGaze.y, 8, 0, Math.PI * 2)
+      this.ctx.fillStyle = this.isTracking ? 'rgba(102, 234, 126, 0.8)' : 'rgba(255, 255, 255, 0.5)'
+      this.ctx.fill()
+      
+      // Add ring around gaze point
+      this.ctx.beginPath()
+      this.ctx.arc(this.currentGaze.x, this.currentGaze.y, 15, 0, Math.PI * 2)
+      this.ctx.strokeStyle = this.isTracking ? 'rgba(102, 234, 126, 0.6)' : 'rgba(255, 255, 255, 0.3)'
+      this.ctx.lineWidth = 2
+      this.ctx.stroke()
+    }
   }
 
   recordGazeData(gazeData: GazeData) {
+    // Update current gaze position for rendering
+    this.currentGaze = { x: gazeData.gazeX, y: gazeData.gazeY }
+
     // Find closest object to gaze
     let closestObj: GameObject | null = null
     let minDistance = Infinity
@@ -266,12 +306,28 @@ export class GameEngine {
       }
     })
 
+    // More generous threshold: 3x radius instead of 2x
+    // This accounts for eye-tracking inaccuracy
+    const threshold = closestObj ? closestObj.radius * 3 : 0
+    const isOnTarget = closestObj && minDistance < threshold
+
+    // Update tracking status
+    this.isTracking = !!isOnTarget
+    this.totalFrames++
+    if (isOnTarget) {
+      this.trackingScore++
+    }
+
     this.sessionData.gazeData.push({
       ...gazeData,
-      objectId: closestObj && minDistance < closestObj.radius * 2 ? closestObj.id : null,
+      objectId: isOnTarget ? closestObj.id : null,
       objectX: closestObj?.x || 0,
       objectY: closestObj?.y || 0
     })
+  }
+
+  getTrackingAccuracy(): number {
+    return this.totalFrames > 0 ? Math.round((this.trackingScore / this.totalFrames) * 100) : 0
   }
 
   getSessionData(): SessionData {

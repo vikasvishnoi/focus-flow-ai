@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import styles from './GameCanvas.module.css'
 import { GameEngine } from '@/lib/gameEngine'
 import { EyeTracker } from '@/lib/eyeTracker'
+import SessionSummary from './SessionSummary'
 
 interface GameCanvasProps {
   level: string
@@ -14,9 +15,17 @@ export default function GameCanvas({ level }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gameEngineRef = useRef<GameEngine | null>(null)
   const eyeTrackerRef = useRef<EyeTracker | null>(null)
+
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const [isCalibrating, setIsCalibrating] = useState(true)
+  const [calibrationStatus, setCalibrationStatus] = useState('ready')
   const [sessionStarted, setSessionStarted] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [showSummary, setShowSummary] = useState(false)
+  const [sessionData, setSessionData] = useState<any>(null)
+  const [remainingTime, setRemainingTime] = useState(300) // 5 minutes in seconds
+  const [trackingAccuracy, setTrackingAccuracy] = useState(0)
   const router = useRouter()
 
   useEffect(() => {
@@ -37,20 +46,29 @@ export default function GameCanvas({ level }: GameCanvasProps) {
     eyeTrackerRef.current = new EyeTracker()
 
     return () => {
+      // Cleanup on unmount
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current)
+      }
       gameEngineRef.current?.stop()
-      eyeTrackerRef.current?.stop()
+      eyeTrackerRef.current?.cleanup()
     }
   }, [level])
 
   const startCalibration = async () => {
     if (!eyeTrackerRef.current) return
     
+    setCalibrationStatus('initializing')
+    setError(null)
+    
     try {
       await eyeTrackerRef.current.initialize()
+      setCalibrationStatus('complete')
       setIsCalibrating(false)
     } catch (error) {
       console.error('Calibration failed:', error)
-      alert('Camera access is required for eye tracking. Please allow camera access and try again.')
+      setCalibrationStatus('error')
+      setError('Camera access is required for eye tracking. Please allow camera access and reload the page.')
     }
   }
 
@@ -70,27 +88,71 @@ export default function GameCanvas({ level }: GameCanvasProps) {
 
   const beginGame = () => {
     setSessionStarted(true)
+    setRemainingTime(300) // Reset to 5 minutes
+    
     gameEngineRef.current?.start()
     eyeTrackerRef.current?.startTracking((gazeData) => {
       gameEngineRef.current?.recordGazeData(gazeData)
     })
 
-    // Auto-end session after 5 minutes
-    setTimeout(() => {
-      endSession()
-    }, 5 * 60 * 1000)
+    // Update remaining time and score every second
+    const updateInterval = setInterval(() => {
+      setRemainingTime(prev => {
+        const newTime = prev - 1
+        
+        // Auto-end when time reaches 0
+        if (newTime <= 0) {
+          clearInterval(updateInterval)
+          endSession()
+          return 0
+        }
+        return newTime
+      })
+      
+      // Update tracking accuracy display
+      if (gameEngineRef.current) {
+        setTrackingAccuracy(gameEngineRef.current.getTrackingAccuracy())
+      }
+    }, 1000)
+
+    timerIntervalRef.current = updateInterval
   }
 
   const endSession = async () => {
+    // Prevent multiple calls
+    if (!sessionStarted) return
+    
+    // Clear interval
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current)
+      timerIntervalRef.current = null
+    }
+
+    setSessionStarted(false)
+    
+    // Stop game and tracking
     gameEngineRef.current?.stop()
     eyeTrackerRef.current?.stop()
 
-    const sessionData = gameEngineRef.current?.getSessionData()
+    const data = gameEngineRef.current?.getSessionData()
     
     // TODO: Send to AWS backend
-    console.log('Session data:', sessionData)
+    console.log('Session data:', JSON.stringify(data))
 
-    router.push('/dashboard')
+    // Cleanup camera - this should turn off the camera light
+    try {
+      await eyeTrackerRef.current?.cleanup()
+      console.log('Camera cleaned up successfully')
+    } catch (error) {
+      console.error('Error cleaning up camera:', error)
+    }
+
+    setSessionData(data)
+    setShowSummary(true)
+  }
+
+  const handleCloseSummary = () => {
+    router.push('/')
   }
 
   return (
@@ -101,11 +163,29 @@ export default function GameCanvas({ level }: GameCanvasProps) {
         <div className={styles.overlay}>
           <div className={styles.calibrationBox}>
             <h2>Eye Tracking Calibration</h2>
-            <p>We need to calibrate the eye tracker before starting.</p>
-            <p>Please look at the points that appear on screen and click on them.</p>
-            <button onClick={startCalibration} className={styles.button}>
-              Start Calibration
-            </button>
+            {calibrationStatus === 'ready' && (
+              <>
+                <p>We need to calibrate the eye tracker before starting.</p>
+                <p>Make sure you&apos;re in a well-lit area and your face is visible to the camera.</p>
+                <button onClick={startCalibration} className={styles.button}>
+                  Start Calibration
+                </button>
+              </>
+            )}
+            {calibrationStatus === 'initializing' && (
+              <>
+                <p>Initializing camera and eye tracker...</p>
+                <p>Please wait while we set things up.</p>
+              </>
+            )}
+            {calibrationStatus === 'error' && error && (
+              <>
+                <p style={{ color: '#ff6b6b' }}>{error}</p>
+                <button onClick={startCalibration} className={styles.button}>
+                  Try Again
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -129,9 +209,22 @@ export default function GameCanvas({ level }: GameCanvasProps) {
       )}
 
       {sessionStarted && (
-        <button onClick={endSession} className={styles.endButton}>
-          End Session
-        </button>
+        <>
+          <button onClick={endSession} className={styles.endButton}>
+            End Session
+          </button>
+          <div className={styles.timer}>
+            {Math.floor(remainingTime / 60)}:{(remainingTime % 60).toString().padStart(2, '0')}
+          </div>
+          <div className={styles.scoreDisplay}>
+            <div className={styles.scoreValue}>{trackingAccuracy}%</div>
+            <div className={styles.scoreLabel}>Tracking Accuracy</div>
+          </div>
+        </>
+      )}
+
+      {showSummary && sessionData && (
+        <SessionSummary sessionData={sessionData} onClose={handleCloseSummary} />
       )}
     </div>
   )

@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:https": "node server.js",
+    "generate-certs": "node scripts/generate-certs.js",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -18,8 +20,9 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "typescript": "^5",
     "eslint": "^8",
-    "eslint-config-next": "14.2.5"
+    "eslint-config-next": "14.2.5",
+    "mkcert": "^3.2.0",
+    "typescript": "^5"
   }
 }
