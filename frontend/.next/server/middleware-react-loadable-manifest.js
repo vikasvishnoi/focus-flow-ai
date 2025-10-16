@@ -1,1 +1,0 @@
-self.__REACT_LOADABLE_MANIFEST="{\"lib/eyeTracker.ts -> webgazer\":{\"id\":\"lib/eyeTracker.ts -> webgazer\",\"files\":[\"static/chunks/_app-pages-browser_node_modules_webgazer_src_index_mjs.js\"]}}"

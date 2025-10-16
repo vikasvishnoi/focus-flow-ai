@@ -1,11 +1,13 @@
-'use client'
-
-import { useParams } from 'next/navigation'
 import GameCanvas from '@/components/GameCanvas'
 
-export default function GamePage() {
-  const params = useParams()
-  const level = params.level as string
+export function generateStaticParams() {
+  return [
+    { level: 'level1' },
+    { level: 'level2' },
+    { level: 'level3' },
+  ]
+}
 
-  return <GameCanvas level={level} />
+export default function GamePage({ params }: { params: { level: string } }) {
+  return <GameCanvas level={params.level} />
 }

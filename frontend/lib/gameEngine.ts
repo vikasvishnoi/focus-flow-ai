@@ -308,11 +308,22 @@ export class GameEngine {
 
     // More generous threshold: 3x radius instead of 2x
     // This accounts for eye-tracking inaccuracy
-    const threshold = closestObj ? closestObj.radius * 3 : 0
-    const isOnTarget = closestObj && minDistance < threshold
+    let isOnTarget = false
+    let targetId: string | null = null
+    let targetX = 0
+    let targetY = 0
+
+    if (closestObj) {
+      const obj = closestObj as GameObject
+      const threshold = obj.radius * 3
+      isOnTarget = minDistance < threshold
+      targetId = isOnTarget ? obj.id : null
+      targetX = obj.x
+      targetY = obj.y
+    }
 
     // Update tracking status
-    this.isTracking = !!isOnTarget
+    this.isTracking = isOnTarget
     this.totalFrames++
     if (isOnTarget) {
       this.trackingScore++
@@ -320,9 +331,9 @@ export class GameEngine {
 
     this.sessionData.gazeData.push({
       ...gazeData,
-      objectId: isOnTarget ? closestObj.id : null,
-      objectX: closestObj?.x || 0,
-      objectY: closestObj?.y || 0
+      objectId: targetId,
+      objectX: targetX,
+      objectY: targetY
     })
   }
 
