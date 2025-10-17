@@ -136,8 +136,32 @@ export default function GameCanvas({ level }: GameCanvasProps) {
 
     const data = gameEngineRef.current?.getSessionData()
     
-    // TODO: Send to AWS backend
-    console.log('Session data:', JSON.stringify(data))
+    // Send to AWS backend
+    if (data) {
+      try {
+        const { getUserId, generateSessionId, submitSession } = await import('@/lib/api')
+        const userId = getUserId()
+        const sessionId = generateSessionId()
+
+        console.log('Submitting session to backend...')
+        
+        const response = await submitSession({
+          userId,
+          sessionId,
+          level: data.level,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          gazeData: data.gazeData,
+          events: data.events
+        })
+
+        console.log('Session submitted successfully:', response)
+        console.log('AI analysis will be available in ~30 seconds')
+      } catch (error) {
+        console.error('Error submitting session:', error)
+        // Continue anyway to show summary
+      }
+    }
 
     // Cleanup camera - this should turn off the camera light
     try {

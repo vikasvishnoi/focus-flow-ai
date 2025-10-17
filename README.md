@@ -61,10 +61,16 @@ focusflow-ai/
 
 ### Prerequisites
 
+**For Local Development:**
 - Node.js 18+ and npm
 - Modern web browser (Chrome, Safari, Firefox)
 - Webcam access
 - HTTPS for mobile testing (camera access requires secure context)
+
+**For AWS Deployment:**
+- AWS Account with Bedrock access
+- AWS CLI configured
+- Terraform 1.5+
 
 ### Frontend Setup
 
